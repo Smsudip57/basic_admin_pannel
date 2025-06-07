@@ -59,105 +59,161 @@ const Products = () => {
   const [showBy, setshowBy] = useState(8);
   const [categoryVal, setcategoryVal] = useState("all");
   const [page, setPage] = useState(1);
-  const [totalProducts, setTotalProducts] = useState();
-  const [totalCategory, setTotalCategory] = useState();
-  const [totalSubCategory, setTotalSubCategory] = useState();
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [totalCategory, setTotalCategory] = useState(0);
+  const [totalSubCategory, setTotalSubCategory] = useState(0);
   const [isLoadingBar, setIsLoadingBar] = useState(false);
   const open = Boolean(anchorEl);
 
   const context = useContext(MyContext);
 
-  const [productList, setProductList] = useState([]);
+  const [productList, setProductList] = useState({
+    products: [],
+    totalPages: 0,
+  });
 
   const ITEM_HEIGHT = 48;
 
   useEffect(() => {
     window.scrollTo(0, 0);
     context.setProgress(40);
-    fetchDataFromApi("/api/products?page=1&perPage=8&location=All").then(
-      (res) => {
-        setProductList(res);
+
+    // Fixed: Use consistent API endpoint
+    fetchDataFromApi("/api/products?page=1&perPage=8&location=All")
+      .then((res) => {
+        setProductList(res || { products: [], totalPages: 0 });
         context.setProgress(100);
-      }
-    );
+      })
+      .catch((error) => {
+        console.error("Error fetching products:", error);
+        context.setProgress(100);
+      });
 
-    fetchDataFromApi("/api/products/get/count").then((res) => {
-      setTotalProducts(res.productsCount);
-    });
+    // Fixed: Use correct API endpoints for counts
+    fetchDataFromApi("/api/products/get/count")
+      .then((res) => {
+        setTotalProducts(res?.productsCount || 0);
+      })
+      .catch((error) => {
+        console.error("Error fetching products count:", error);
+      });
 
-    fetchDataFromApi("/api/category/get/count").then((res) => {
-      setTotalCategory(res.categoryCount);
-    });
+    // Fixed: Use correct category count endpoint
+    fetchDataFromApi("/api/category/get/count")
+      .then((res) => {
+        setTotalCategory(res?.categoryCount || 0);
+      })
+      .catch((error) => {
+        console.error("Error fetching category count:", error);
+      });
 
-    fetchDataFromApi("/api/category/subCat/get/count").then((res) => {
-      setTotalSubCategory(res.categoryCount);
-    });
+    // Fixed: Use correct subcategory count endpoint
+    fetchDataFromApi("/api/category/subCat/get/count")
+      .then((res) => {
+        setTotalSubCategory(res?.subCategoryCount || res?.categoryCount || 0);
+      })
+      .catch((error) => {
+        console.error("Error fetching subcategory count:", error);
+      });
   }, []);
 
   const deleteProduct = (id) => {
     context.setProgress(40);
     setIsLoadingBar(true);
-    deleteData(`/api/products/${id}`).then((res) => {
-      context.setProgress(100);
-      context.setAlertBox({
-        open: true,
-        error: false,
-        msg: "Product Deleted!",
-      });
+    deleteData(`/api/products/${id}`)
+      .then((res) => {
+        context.setProgress(100);
+        context.setAlertBox({
+          open: true,
+          error: false,
+          msg: "Product Deleted!",
+        });
 
-      fetchDataFromApi(
-        `/api/products?page=${page}&perPage=8&location=All`
-      ).then((res) => {
-        setProductList(res);
+        // Refresh the current page data
+        fetchDataFromApi(
+          `/api/products?page=${page}&perPage=${showBy}&location=All`
+        ).then((res) => {
+          setProductList(res || { products: [], totalPages: 0 });
+        });
+        context.fetchCategory();
+        setIsLoadingBar(false);
+      })
+      .catch((error) => {
+        console.error("Error deleting product:", error);
+        context.setProgress(100);
+        setIsLoadingBar(false);
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: "Failed to delete product!",
+        });
       });
-      context.fetchCategory();
-      setIsLoadingBar(false);
-    });
   };
 
   const handleChange = (event, value) => {
     context.setProgress(40);
     setPage(value);
-    fetchDataFromApi(`/api/products?page=${value}&perPage=8&location=All`).then(
-      (res) => {
-        setProductList(res);
+    fetchDataFromApi(
+      `/api/products?page=${value}&perPage=${showBy}&location=All`
+    )
+      .then((res) => {
+        setProductList(res || { products: [], totalPages: 0 });
         context.setProgress(100);
         window.scrollTo({
           top: 200,
           behavior: "smooth",
         });
-      }
-    );
+      })
+      .catch((error) => {
+        console.error("Error fetching products:", error);
+        context.setProgress(100);
+      });
   };
 
   const showPerPage = (e) => {
     setshowBy(e.target.value);
+    setPage(1); // Reset to first page when changing items per page
     fetchDataFromApi(
-      `/api/products?page=${1}&perPage=${e.target.value}&location=All`
-    ).then((res) => {
-      setProductList(res);
-      context.setProgress(100);
-    });
+      `/api/products?page=1&perPage=${e.target.value}&location=All`
+    )
+      .then((res) => {
+        setProductList(res || { products: [], totalPages: 0 });
+        context.setProgress(100);
+      })
+      .catch((error) => {
+        console.error("Error fetching products:", error);
+        context.setProgress(100);
+      });
   };
 
   const handleChangeCategory = (event) => {
+    setPage(1); // Reset to first page when changing category
+
     if (event.target.value !== "all") {
       setcategoryVal(event.target.value);
+      // Fixed: Use consistent API pattern
       fetchDataFromApi(
-        `/api/products/catId?catId=${event.target.value}&location=All`
-      ).then((res) => {
-        setProductList(res);
-        context.setProgress(100);
-      });
-    }
-    if (event.target.value === "all") {
+        `/api/products/catId?catId=${event.target.value}&location=All&page=1&perPage=${showBy}`
+      )
+        .then((res) => {
+          setProductList(res || { products: [], totalPages: 0 });
+          context.setProgress(100);
+        })
+        .catch((error) => {
+          console.error("Error fetching products by category:", error);
+          context.setProgress(100);
+        });
+    } else {
       setcategoryVal(event.target.value);
-      fetchDataFromApi(
-        `/api/products?page=${1}&perPage=${8}&location=All`
-      ).then((res) => {
-        setProductList(res);
-        context.setProgress(100);
-      });
+      fetchDataFromApi(`/api/products?page=1&perPage=${showBy}&location=All`)
+        .then((res) => {
+          setProductList(res || { products: [], totalPages: 0 });
+          context.setProgress(100);
+        })
+        .catch((error) => {
+          console.error("Error fetching all products:", error);
+          context.setProgress(100);
+        });
     }
   };
 
@@ -281,12 +337,11 @@ const Products = () => {
                   <th>CATEGORY</th>
                   <th>SUB CATEGORY</th>
                   <th>BRAND</th>
+                  <th>WEBMETAG</th>
                   <th>PRICE</th>
                   <th>RATING</th>
                   <th>DISCOUNT</th>
-                  <th>PRODUCT RAMS</th>
-                  <th>PRODUCT WEIGHT</th>
-                  <th>PRODUCT SIZE</th>
+                  <th>STOCK</th>
                   <th>ACTION</th>
                 </tr>
               </thead>
@@ -295,88 +350,81 @@ const Products = () => {
                 {productList?.products?.length !== 0 &&
                   productList?.products?.map((item, index) => {
                     return (
-                      <tr>
+                      <tr key={item?._id || index}>
                         <td>
                           <div className="d-flex align-items-center productBox">
                             <div className="imgWrapper">
                               <div className="img card shadow m-0">
                                 <LazyLoadImage
-                                  alt={"image"}
+                                  alt={item?.name || "product image"}
                                   effect="blur"
                                   className="w-100"
-                                  src={item.images[0]}
+                                  src={item?.images?.[0] || "/placeholder.jpg"}
                                 />
                               </div>
                             </div>
                             <div className="info pl-3">
-                              <h6>{item?.name}</h6>
-                              <p>{item?.description}</p>
+                              <h6>{item?.name || "N/A"}</h6>
+                              <p>
+                                {item?.description?.substring(0, 50) || "N/A"}
+                                ...
+                              </p>
                             </div>
                           </div>
                         </td>
 
-                        <td>{item?.category?.name}</td>
-                        <td>{item?.subCatName}</td>
-                        <td>{item?.brand}</td>
+                        <td>{item?.category?.name || "N/A"}</td>
+                        <td>{item?.subCatName || "N/A"}</td>
+                        <td>{item?.brand || "N/A"}</td>
+                        <td>
+                          <span className="badge badge-info">
+                            {item?.webmetag || "No Tag"}
+                          </span>
+                        </td>
                         <td>
                           <div style={{ width: "70px" }}>
-                            <del className="old">Rs {item?.oldPrice}</del>
+                            {item?.oldPrice > 0 && (
+                              <del className="old">Rs {item?.oldPrice}</del>
+                            )}
                             <span className="new text-danger">
-                              Rs {item?.price}
+                              Rs {item?.price || 0}
                             </span>
                           </div>
                         </td>
                         <td>
                           <Rating
                             name="read-only"
-                            defaultValue={item?.rating}
+                            defaultValue={item?.rating || 0}
                             precision={0.5}
                             size="small"
                             readOnly
                           />
                         </td>
 
-                        <td>{item?.discount}</td>
-
+                        <td>{item?.discount || 0}%</td>
                         <td>
-                          {item?.productRam?.map((ram) => {
-                            return (
-                              <span className="badge badge-primary mr-2">
-                                {ram}
-                              </span>
-                            );
-                          })}
-                        </td>
-
-                        <td>
-                          {item?.productWeight?.map((weight) => {
-                            return (
-                              <span className="badge badge-primary mr-2">
-                                {weight}
-                              </span>
-                            );
-                          })}
-                        </td>
-
-                        <td>
-                          {item?.size?.map((size) => {
-                            return (
-                              <span className="badge badge-primary mr-2">
-                                {size}
-                              </span>
-                            );
-                          })}
+                          <span
+                            className={`badge ${
+                              item?.countInStock > 0
+                                ? "badge-success"
+                                : "badge-danger"
+                            }`}
+                          >
+                            {item?.countInStock || 0}
+                          </span>
                         </td>
 
                         <td>
                           <div className="actions d-flex align-items-center">
-                            <Link to={`/product/details/${item.id}`}>
+                            <Link
+                              to={`/product/details/${item?._id || item?.id}`}
+                            >
                               <Button className="secondary" color="secondary">
                                 <FaEye />
                               </Button>
                             </Link>
 
-                            <Link to={`/product/edit/${item.id}`}>
+                            <Link to={`/product/edit/${item?._id || item?.id}`}>
                               <Button className="success" color="success">
                                 <FaPencilAlt />
                               </Button>
@@ -385,7 +433,9 @@ const Products = () => {
                             <Button
                               className="error"
                               color="error"
-                              onClick={() => deleteProduct(item?.id)}
+                              onClick={() =>
+                                deleteProduct(item?._id || item?.id)
+                              }
                               disabled={isLoadingBar === true ? true : false}
                             >
                               <MdDelete />
@@ -398,10 +448,18 @@ const Products = () => {
               </tbody>
             </table>
 
+            {/* Show message if no products found */}
+            {productList?.products?.length === 0 && (
+              <div className="text-center py-4">
+                <p className="text-muted">No products found.</p>
+              </div>
+            )}
+
             {productList?.totalPages > 1 && (
               <div className="d-flex tableFooter">
                 <Pagination
                   count={productList?.totalPages}
+                  page={page}
                   color="primary"
                   className="pagination"
                   showFirstButton
