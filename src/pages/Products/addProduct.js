@@ -6,6 +6,9 @@ import Chip from "@mui/material/Chip";
 
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
+import Tabs from "@mui/material/Tabs";
+import Tab from "@mui/material/Tab";
+import Box from "@mui/material/Box";
 import { useContext, useEffect, useRef, useState } from "react";
 import Rating from "@mui/material/Rating";
 import { FaCloudUploadAlt } from "react-icons/fa";
@@ -29,6 +32,7 @@ import "react-lazy-load-image-component/src/effects/blur.css";
 
 import axios from "axios";
 import CountryDropdown from "../../components/CountryDropdown";
+import TextEditor from "../../components/Shared/TextEditor";
 
 //breadcrumb code
 const StyledBreadcrumb = styled(Chip)(({ theme }) => {
@@ -84,8 +88,31 @@ const ProductUpload = () => {
   const [uploading, setUploading] = useState(false);
 
   const [previews, setPreviews] = useState([]);
+  const [videoPreviews, setVideoPreviews] = useState([]);
+  const [selectedThumbnail, setSelectedThumbnail] = useState(null);
 
   const [isDisable, setIsDisable] = useState(true);
+
+  const [activeTab, setActiveTab] = useState(0);
+
+  const [currentFeature, setCurrentFeature] = useState({
+    featureCategory: "",
+    featuresList: [],
+  });
+  const [currentFeatureName, setCurrentFeatureName] = useState("");
+  const [currentFeatureValue, setCurrentFeatureValue] = useState(false);
+  const [editingCategoryIndex, setEditingCategoryIndex] = useState(null);
+  const [tempCategoryName, setTempCategoryName] = useState("");
+
+  const [currentFAQ, setCurrentFAQ] = useState({
+    question: "",
+    answer: "",
+  });
+
+  const [currentSpecification, setCurrentSpecification] = useState({
+    key: "",
+    value: "",
+  });
 
   const history = useNavigate();
 
@@ -93,7 +120,7 @@ const ProductUpload = () => {
   const [formFields, setFormFields] = useState({
     name: "",
     description: "",
-    webmetag: "", // Added webmetag field
+    webmetag: "",
     brand: "",
     price: 0,
     oldPrice: 0,
@@ -111,6 +138,9 @@ const ProductUpload = () => {
     size: [],
     productWeight: [],
     location: "All",
+    features: [],
+    faq: [],
+    specifications: [],
   });
 
   const productImages = useRef();
@@ -266,49 +296,45 @@ const ProductUpload = () => {
       }
     } catch (error) {
       console.log(error);
+      setUploading(false);
+      return false;
     }
 
-    uploadImage(apiEndPoint, formdata).then((res) => {
-      fetchDataFromApi("/api/imageUpload").then((response) => {
-        if (
-          response !== undefined &&
-          response !== null &&
-          response !== "" &&
-          response.length !== 0
-        ) {
-          response.length !== 0 &&
-            response.map((item) => {
-              item?.images.length !== 0 &&
-                item?.images?.map((img) => {
-                  img_arr.push(img);
-                });
-            });
+    uploadImage(apiEndPoint, formdata)
+      .then((res) => {
+        console.log("Upload response:", res);
 
-          uniqueArray = img_arr.filter(
-            (item, index) => img_arr.indexOf(item) === index
-          );
-
-          const appendedArray = [...previews, ...uniqueArray];
-
+        if (res && res.length > 0) {
+          const appendedArray = [...previews, ...res];
           setPreviews(appendedArray);
 
-          setTimeout(() => {
-            setUploading(false);
-            img_arr = [];
-            context.setAlertBox({
-              open: true,
-              error: false,
-              msg: "Images Uploaded!",
-            });
-          }, 500);
+          context.setAlertBox({
+            open: true,
+            error: false,
+            msg: "Images Uploaded!",
+          });
+        } else {
+          context.setAlertBox({
+            open: true,
+            error: true,
+            msg: "Upload failed or no images returned",
+          });
         }
+      })
+      .catch((error) => {
+        console.error("Upload error:", error);
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: "Error uploading images",
+        });
+      })
+      .finally(() => {
+        setUploading(false);
       });
-    });
   };
 
   const removeImg = async (index, imgUrl) => {
-    const imgIndex = previews.indexOf(imgUrl);
-
     deleteImages(`/api/category/deleteImage?img=${imgUrl}`).then((res) => {
       context.setAlertBox({
         open: true,
@@ -317,9 +343,286 @@ const ProductUpload = () => {
       });
     });
 
-    if (imgIndex > -1) {
-      previews.splice(index, 1);
+    const updatedPreviews = previews.filter((_, i) => i !== index);
+    setPreviews(updatedPreviews);
+  };
+
+  const onChangeFileVideo = async (e) => {
+    try {
+      const files = e.target.files;
+      setUploading(true);
+      const videoFormData = new FormData();
+
+      for (var i = 0; i < files.length; i++) {
+        if (
+          files[i] &&
+          (files[i].type === "video/mp4" ||
+            files[i].type === "video/webm" ||
+            files[i].type === "video/quicktime" ||
+            files[i].type === "video/x-msvideo" ||
+            files[i].name.endsWith(".mkv"))
+        ) {
+          const file = files[i];
+          videoFormData.append(`videos`, file);
+        } else {
+          context.setAlertBox({
+            open: true,
+            error: true,
+            msg: "Please select valid video files (mp4, webm, mov, avi, mkv).",
+          });
+
+          setUploading(false);
+          return false;
+        }
+      }
+
+      uploadImage("/api/products/uploadVideo", videoFormData)
+        .then((res) => {
+          console.log("Video upload response:", res);
+
+          if (res && res.length > 0) {
+            const appendedVideos = [...videoPreviews, ...res];
+            setVideoPreviews(appendedVideos);
+
+            context.setAlertBox({
+              open: true,
+              error: false,
+              msg: "Videos Uploaded!",
+            });
+          } else {
+            context.setAlertBox({
+              open: true,
+              error: true,
+              msg: "Upload failed or no videos returned",
+            });
+          }
+        })
+        .catch((error) => {
+          console.error("Video upload error:", error);
+          context.setAlertBox({
+            open: true,
+            error: true,
+            msg: "Error uploading videos",
+          });
+        })
+        .finally(() => {
+          setUploading(false);
+        });
+    } catch (error) {
+      console.log(error);
+      setUploading(false);
     }
+  };
+
+  const removeVideo = async (index, videoUrl) => {
+    const videoIndex = videoPreviews.indexOf(videoUrl);
+
+    deleteImages(`/api/category/deleteImage?img=${videoUrl}`).then((res) => {
+      context.setAlertBox({
+        open: true,
+        error: false,
+        msg: "Video Deleted!",
+      });
+    });
+
+    if (videoIndex > -1) {
+      videoPreviews.splice(index, 1);
+      setVideoPreviews([...videoPreviews]);
+    }
+  };
+
+  const setThumbnail = (imageUrl) => {
+    setSelectedThumbnail(imageUrl);
+  };
+
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+  };
+
+  const addFeature = () => {
+    if (!currentFeatureName.trim()) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Please enter feature name",
+      });
+      return;
+    }
+
+    // Add feature to current category
+    const updatedFeatures = [...formFields.features];
+    updatedFeatures[editingCategoryIndex].featuresList.push({
+      featuresName: currentFeatureName,
+      value: currentFeatureValue,
+    });
+
+    setFormFields(() => ({
+      ...formFields,
+      features: updatedFeatures,
+    }));
+
+    setCurrentFeatureName("");
+    setCurrentFeatureValue(false);
+
+    context.setAlertBox({
+      open: true,
+      error: false,
+      msg: "Feature added successfully",
+    });
+  };
+
+  const createFeatureCategory = () => {
+    if (!tempCategoryName.trim()) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Please enter category name",
+      });
+      return;
+    }
+
+    // Create new category
+    const newCategory = {
+      featureCategory: tempCategoryName,
+      featuresList: [],
+    };
+
+    const updatedFeatures = [...formFields.features, newCategory];
+    setFormFields(() => ({
+      ...formFields,
+      features: updatedFeatures,
+    }));
+
+    // Automatically enter edit mode for the new category
+    setEditingCategoryIndex(updatedFeatures.length - 1);
+    setTempCategoryName("");
+    setCurrentFeatureName("");
+    setCurrentFeatureValue(false);
+
+    context.setAlertBox({
+      open: true,
+      error: false,
+      msg: "Category created. Now add features to it!",
+    });
+  };
+
+  const removeFeature = (categoryIndex, featureIndex) => {
+    const updatedFeatures = [...formFields.features];
+
+    if (featureIndex !== null) {
+      // Remove specific feature from category
+      updatedFeatures[categoryIndex].featuresList.splice(featureIndex, 1);
+
+      // If no features left, remove the category
+      if (updatedFeatures[categoryIndex].featuresList.length === 0) {
+        updatedFeatures.splice(categoryIndex, 1);
+        setEditingCategoryIndex(null);
+      }
+    } else {
+      // Remove entire category
+      updatedFeatures.splice(categoryIndex, 1);
+      setEditingCategoryIndex(null);
+    }
+
+    setFormFields(() => ({
+      ...formFields,
+      features: updatedFeatures,
+    }));
+  };
+
+  const toggleFeatureValue = (categoryIndex, featureIndex) => {
+    const updatedFeatures = [...formFields.features];
+    updatedFeatures[categoryIndex].featuresList[featureIndex].value =
+      !updatedFeatures[categoryIndex].featuresList[featureIndex].value;
+
+    setFormFields(() => ({
+      ...formFields,
+      features: updatedFeatures,
+    }));
+  };
+
+  const startEditingCategory = (categoryIndex) => {
+    setEditingCategoryIndex(categoryIndex);
+    setCurrentFeatureName("");
+    setCurrentFeatureValue(false);
+  };
+
+  const cancelEditingCategory = () => {
+    setEditingCategoryIndex(null);
+    setCurrentFeatureName("");
+    setCurrentFeatureValue(false);
+    setTempCategoryName("");
+  };
+
+  const addFAQ = () => {
+    if (!currentFAQ.question.trim() || !currentFAQ.answer.trim()) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Please enter both question and answer",
+      });
+      return;
+    }
+
+    const updatedFAQ = [...formFields.faq, currentFAQ];
+    setFormFields(() => ({
+      ...formFields,
+      faq: updatedFAQ,
+    }));
+
+    setCurrentFAQ({ question: "", answer: "" });
+
+    context.setAlertBox({
+      open: true,
+      error: false,
+      msg: "FAQ added successfully",
+    });
+  };
+
+  const removeFAQ = (index) => {
+    const updatedFAQ = formFields.faq.filter((_, i) => i !== index);
+    setFormFields(() => ({
+      ...formFields,
+      faq: updatedFAQ,
+    }));
+  };
+
+  const addSpecification = () => {
+    if (
+      !currentSpecification.key.trim() ||
+      !currentSpecification.value.trim()
+    ) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Please enter both specification key and value",
+      });
+      return;
+    }
+
+    const updatedSpecs = [...formFields.specifications, currentSpecification];
+    setFormFields(() => ({
+      ...formFields,
+      specifications: updatedSpecs,
+    }));
+
+    setCurrentSpecification({ key: "", value: "" });
+
+    context.setAlertBox({
+      open: true,
+      error: false,
+      msg: "Specification added successfully",
+    });
+  };
+
+  const removeSpecification = (index) => {
+    const updatedSpecs = formFields.specifications.filter(
+      (_, i) => i !== index,
+    );
+    setFormFields(() => ({
+      ...formFields,
+      specifications: updatedSpecs,
+    }));
   };
 
   const addProduct = (e) => {
@@ -389,6 +692,8 @@ const ProductUpload = () => {
       name: formFields.name,
       description: formFields.description,
       images: appendedArray,
+      videos: videoPreviews || [],
+      thumbnail: selectedThumbnail || appendedArray[0] || null,
       webmetag: formFields.webmetag || "",
       brand: formFields.brand || "",
       price: Number(formFields.price) || 0,
@@ -407,6 +712,9 @@ const ProductUpload = () => {
       size: formFields.size || [],
       productWeight: formFields.productWeight || [],
       location: formFields.location || "All",
+      features: formFields.features || [],
+      faq: formFields.faq || [],
+      specifications: formFields.specifications || [],
     };
 
     console.log("Product Data:", productData);
@@ -481,12 +789,15 @@ const ProductUpload = () => {
 
                 <div className="form-group">
                   <h6>DESCRIPTION</h6>
-                  <textarea
-                    rows={5}
-                    cols={10}
+                  <TextEditor
                     value={formFields.description}
-                    name="description"
-                    onChange={inputChange}
+                    onChange={(content) => {
+                      setFormFields(() => ({
+                        ...formFields,
+                        description: content,
+                      }));
+                    }}
+                    placeholder="Enter product description with images and formatting..."
                   />
                 </div>
 
@@ -657,74 +968,6 @@ const ProductUpload = () => {
 
                   <div className="col-md-4">
                     <div className="form-group">
-                      <h6>PRODUCT RAMS</h6>
-                      <Select
-                        multiple
-                        value={productRams}
-                        onChange={handleChangeProductRams}
-                        displayEmpty
-                        className="w-100"
-                        MenuProps={MenuProps}
-                      >
-                        {productRAMSData?.map((item, index) => {
-                          return (
-                            <MenuItem key={index} value={item.productRam}>
-                              {item.productRam}
-                            </MenuItem>
-                          );
-                        })}
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="row">
-                  <div className="col-md-4">
-                    <div className="form-group">
-                      <h6>PRODUCT WEIGHT</h6>
-                      <Select
-                        multiple
-                        value={productWeight}
-                        onChange={handleChangeProductWeight}
-                        displayEmpty
-                        MenuProps={MenuProps}
-                        className="w-100"
-                      >
-                        {productWEIGHTData?.map((item, index) => {
-                          return (
-                            <MenuItem key={index} value={item.productWeight}>
-                              {item.productWeight}
-                            </MenuItem>
-                          );
-                        })}
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="col-md-4">
-                    <div className="form-group">
-                      <h6>PRODUCT SIZE</h6>
-                      <Select
-                        multiple
-                        value={productSize}
-                        onChange={handleChangeProductSize}
-                        displayEmpty
-                        MenuProps={MenuProps}
-                        className="w-100"
-                      >
-                        {productSIZEData?.map((item, index) => {
-                          return (
-                            <MenuItem key={index} value={item.size}>
-                              {item.size}
-                            </MenuItem>
-                          );
-                        })}
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="col-md-4">
-                    <div className="form-group">
                       <h6>RATINGS</h6>
                       <Rating
                         name="simple-controlled"
@@ -759,14 +1002,693 @@ const ProductUpload = () => {
           </div>
 
           <div className="card p-4 mt-0">
+            <h5 className="mb-4">Product Details</h5>
+            <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+              <Tabs
+                value={activeTab}
+                onChange={handleTabChange}
+                aria-label="product details tabs"
+              >
+                <Tab label="Specifications" />
+                <Tab label="Features" />
+                <Tab label="FAQs" />
+              </Tabs>
+            </Box>
+
+            {/* SPECIFICATIONS TAB */}
+            {activeTab === 0 && (
+              <Box sx={{ p: 2 }}>
+                <h6 className="mt-3 mb-3">Product Specifications & Variants</h6>
+
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <div className="form-group">
+                      <h6>PRODUCT RAMS</h6>
+                      <Select
+                        multiple
+                        value={productRams}
+                        onChange={handleChangeProductRams}
+                        displayEmpty
+                        className="w-100"
+                        MenuProps={MenuProps}
+                      >
+                        {productRAMSData?.map((item, index) => {
+                          return (
+                            <MenuItem key={index} value={item.productRam}>
+                              {item.productRam}
+                            </MenuItem>
+                          );
+                        })}
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="col-md-6">
+                    <div className="form-group">
+                      <h6>PRODUCT WEIGHT</h6>
+                      <Select
+                        multiple
+                        value={productWeight}
+                        onChange={handleChangeProductWeight}
+                        displayEmpty
+                        MenuProps={MenuProps}
+                        className="w-100"
+                      >
+                        {productWEIGHTData?.map((item, index) => {
+                          return (
+                            <MenuItem key={index} value={item.productWeight}>
+                              {item.productWeight}
+                            </MenuItem>
+                          );
+                        })}
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="row mb-4">
+                  <div className="col-md-6">
+                    <div className="form-group">
+                      <h6>PRODUCT SIZE</h6>
+                      <Select
+                        multiple
+                        value={productSize}
+                        onChange={handleChangeProductSize}
+                        displayEmpty
+                        MenuProps={MenuProps}
+                        className="w-100"
+                      >
+                        {productSIZEData?.map((item, index) => {
+                          return (
+                            <MenuItem key={index} value={item.size}>
+                              {item.size}
+                            </MenuItem>
+                          );
+                        })}
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                <hr />
+
+                <h6 className="mt-4 mb-3">Custom Specifications</h6>
+                {/* <p className="text-muted small">
+                  Add custom specification details like dimensions, materials,
+                  capacity, etc.
+                </p> */}
+
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <div className="form-group">
+                      <label>Specification Name</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g., Stand Up, Frame, Weight Capacity"
+                        value={currentSpecification.key}
+                        onChange={(e) =>
+                          setCurrentSpecification({
+                            ...currentSpecification,
+                            key: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="form-group">
+                      <label>Specification Value</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g., 35″L x 24″W x 37-45″H, 60 LBS"
+                        value={currentSpecification.value}
+                        onChange={(e) =>
+                          setCurrentSpecification({
+                            ...currentSpecification,
+                            value: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={addSpecification}
+                  className="btn-blue mb-4"
+                  variant="contained"
+                >
+                  Add Specification
+                </Button>
+
+                {formFields.specifications.length > 0 && (
+                  <div className="mt-4">
+                    <h6 className="mb-3">Added Specifications</h6>
+                    <div className="table-responsive">
+                      <table className="table table-bordered">
+                        <thead>
+                          <tr>
+                            <th>Name</th>
+                            <th>Value</th>
+                            <th style={{ width: "100px" }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {formFields.specifications.map((spec, index) => (
+                            <tr key={index}>
+                              <td>
+                                <strong>{spec.key}</strong>
+                              </td>
+                              <td>{spec.value}</td>
+                              <td>
+                                <Button
+                                  color="error"
+                                  size="small"
+                                  onClick={() => removeSpecification(index)}
+                                >
+                                  Remove
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </Box>
+            )}
+
+            {/* FEATURES TAB */}
+            {activeTab === 1 && (
+              <Box sx={{ p: 3, pb: 6 }}>
+                <h6
+                  className="mt-0 mb-4"
+                  style={{ fontSize: "16px", fontWeight: 600 }}
+                >
+                  {" "}
+                  Add Product Features
+                </h6>
+
+                {editingCategoryIndex === null ? (
+                  <div
+                    className="card p-4 mb-4"
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      border: "2px dashed #dee2e6",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    <h6
+                      className="mb-3"
+                      style={{
+                        fontSize: "14px",
+                        fontWeight: 600,
+                        color: "#495057",
+                      }}
+                    >
+                      Step 1: Create Feature Category
+                    </h6>
+                    <div className="row mb-3">
+                      <div className="col-md-8">
+                        <div className="form-group mb-0">
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="e.g., Performance, Design, Battery, Safety"
+                            value={tempCategoryName}
+                            onChange={(e) =>
+                              setTempCategoryName(e.target.value)
+                            }
+                            style={{ borderRadius: "6px" }}
+                          />
+                        </div>
+                      </div>
+                      <div className="col-md-4">
+                        <Button
+                          onClick={createFeatureCategory}
+                          className="btn-blue w-100"
+                          variant="contained"
+                          style={{ height: "38px", borderRadius: "6px" }}
+                        >
+                          Create Category
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {formFields.features.length > 0 && (
+                  <div className="mt-4">
+                    <h6
+                      className="mb-4"
+                      style={{ fontSize: "15px", fontWeight: 600 }}
+                    >
+                      Your Feature Categories ({formFields.features.length})
+                    </h6>
+                    {formFields.features.map((feature, categoryIndex) => (
+                      <div
+                        key={categoryIndex}
+                        className="card p-4 mb-3"
+                        style={{
+                          backgroundColor:
+                            editingCategoryIndex === categoryIndex
+                              ? "#ffffff"
+                              : "#ffffff",
+                          borderLeft:
+                            editingCategoryIndex === categoryIndex
+                              ? "5px solid #0d6efd"
+                              : "5px solid #dee2e6",
+                          borderRadius: "8px",
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                          transition: "all 0.3s ease",
+                        }}
+                      >
+                        <div className="d-flex justify-content-between align-items-start mb-3">
+                          <div>
+                            <h5
+                              className="mb-1 text-primary"
+                              style={{ fontSize: "16px", fontWeight: 600 }}
+                            >
+                              {feature.featureCategory}
+                            </h5>
+                            <small className="text-muted">
+                              {feature.featuresList.length} feature
+                              {feature.featuresList.length !== 1
+                                ? "s"
+                                : ""}{" "}
+                              added
+                            </small>
+                          </div>
+                          <div className="d-flex gap-2" style={{ gap: "16px" }}>
+                            {editingCategoryIndex !== categoryIndex && (
+                              <Button
+                                size="small"
+                                className="btn-blue"
+                                variant="contained"
+                                onClick={() =>
+                                  startEditingCategory(categoryIndex)
+                                }
+                                style={{
+                                  borderRadius: "6px",
+                                  padding: "6px 14px",
+                                  fontSize: "12px",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                Add Features
+                              </Button>
+                            )}
+                            <Button
+                              size="small"
+                              onClick={() => removeFeature(categoryIndex, null)}
+                              style={{
+                                borderRadius: "6px",
+                                padding: "6px 14px",
+                                fontSize: "12px",
+                                fontWeight: 600,
+                                backgroundColor: "#fff5f5",
+                                color: "#dc3545",
+                                border: "1px solid #dc3545",
+                              }}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+
+                        {editingCategoryIndex === categoryIndex && (
+                          <div
+                            className="mb-4 p-3"
+                            style={{
+                              backgroundColor: "#f8f9fa",
+                              border: "1px solid #dee2e6",
+                              borderRadius: "6px",
+                            }}
+                          >
+                            <h6
+                              className="mb-3"
+                              style={{
+                                fontSize: "13px",
+                                fontWeight: 600,
+                                color: "#495057",
+                              }}
+                            >
+                              Add New Feature
+                            </h6>
+                            <div className="row mb-3">
+                              <div className="col-md-6">
+                                <div className="form-group mb-0">
+                                  <label
+                                    style={{
+                                      fontSize: "12px",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    Feature Name
+                                  </label>
+                                  <input
+                                    type="text"
+                                    className="form-control"
+                                    placeholder="e.g., Wireless, Fast Charging"
+                                    value={currentFeatureName}
+                                    onChange={(e) =>
+                                      setCurrentFeatureName(e.target.value)
+                                    }
+                                    style={{
+                                      borderRadius: "6px",
+                                      fontSize: "13px",
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                              <div className="col-md-6">
+                                <div className="form-group mb-0">
+                                  <label
+                                    style={{
+                                      fontSize: "12px",
+                                      fontWeight: 600,
+                                      display: "block",
+                                      marginBottom: "6px",
+                                    }}
+                                  >
+                                    Include Feature
+                                  </label>
+                                  <label
+                                    className="d-flex align-items-center gap-2 mb-0"
+                                    style={{ cursor: "pointer", gap: "12px" }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={currentFeatureValue}
+                                      onChange={(e) =>
+                                        setCurrentFeatureValue(e.target.checked)
+                                      }
+                                      style={{
+                                        cursor: "pointer",
+                                        width: "16px",
+                                        height: "16px",
+                                        accentColor: "#0d6efd",
+                                      }}
+                                    />
+                                    <span
+                                      style={{
+                                        fontSize: "13px",
+                                        fontWeight: "600",
+                                        color: currentFeatureValue
+                                          ? "#155724"
+                                          : "#6c757d",
+                                      }}
+                                    >
+                                      {currentFeatureValue
+                                        ? "Yes, Include"
+                                        : "No, Exclude"}
+                                    </span>
+                                  </label>
+                                </div>
+                              </div>
+                            </div>
+                            <div
+                              className="d-flex gap-2"
+                              style={{ gap: "16px" }}
+                            >
+                              <Button
+                                onClick={addFeature}
+                                className="btn-blue"
+                                variant="contained"
+                                size="small"
+                                style={{
+                                  borderRadius: "6px",
+                                  padding: "5px 12px",
+                                  fontSize: "12px",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                Add Feature
+                              </Button>
+                              <Button
+                                onClick={cancelEditingCategory}
+                                variant="contained"
+                                size="small"
+                                style={{
+                                  borderRadius: "6px",
+                                  padding: "5px 12px",
+                                  fontSize: "12px",
+                                  fontWeight: 600,
+                                  backgroundColor: "#6c757d",
+                                  color: "#ffffff",
+                                  border: "none",
+                                }}
+                              >
+                                Done
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {feature.featuresList.length > 0 && (
+                          <div className="table-responsive">
+                            <table
+                              className="table table-sm mb-0"
+                              style={{ marginBottom: 0 }}
+                            >
+                              <thead>
+                                <tr
+                                  style={{
+                                    backgroundColor: "#f8f9fa",
+                                    borderTop: "1px solid #dee2e6",
+                                  }}
+                                >
+                                  <th
+                                    style={{
+                                      fontWeight: 600,
+                                      fontSize: "13px",
+                                      color: "#495057",
+                                    }}
+                                  >
+                                    Feature Name
+                                  </th>
+                                  <th
+                                    style={{
+                                      width: "140px",
+                                      fontWeight: 600,
+                                      fontSize: "13px",
+                                      color: "#495057",
+                                    }}
+                                  >
+                                    Status
+                                  </th>
+                                  <th
+                                    style={{
+                                      width: "80px",
+                                      fontWeight: 600,
+                                      fontSize: "13px",
+                                      color: "#495057",
+                                    }}
+                                  >
+                                    Action
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {feature.featuresList.map(
+                                  (item, featureIndex) => (
+                                    <tr
+                                      key={featureIndex}
+                                      style={{
+                                        borderBottom: "1px solid #dee2e6",
+                                      }}
+                                    >
+                                      <td
+                                        style={{
+                                          paddingTop: "12px",
+                                          paddingBottom: "12px",
+                                        }}
+                                      >
+                                        <strong style={{ color: "#212529" }}>
+                                          {item.featuresName}
+                                        </strong>
+                                      </td>
+                                      <td
+                                        style={{
+                                          paddingTop: "12px",
+                                          paddingBottom: "12px",
+                                        }}
+                                      >
+                                        <label
+                                          className="d-flex align-items-center gap-2 mb-0"
+                                          style={{ gap: "10px" }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={item.value}
+                                            onChange={() =>
+                                              toggleFeatureValue(
+                                                categoryIndex,
+                                                featureIndex,
+                                              )
+                                            }
+                                            style={{
+                                              cursor: "pointer",
+                                              width: "18px",
+                                              height: "18px",
+                                              accentColor: "#0d6efd",
+                                            }}
+                                          />
+                                          <span
+                                            style={{
+                                              color: item.value
+                                                ? "#28a745"
+                                                : "#dc3545",
+                                              fontWeight: "bold",
+                                              fontSize: "13px",
+                                            }}
+                                          >
+                                            {item.value
+                                              ? "Included"
+                                              : "Not Included"}
+                                          </span>
+                                        </label>
+                                      </td>
+                                      <td
+                                        style={{
+                                          paddingTop: "12px",
+                                          paddingBottom: "12px",
+                                        }}
+                                      >
+                                        <Button
+                                          size="small"
+                                          onClick={() =>
+                                            removeFeature(
+                                              categoryIndex,
+                                              featureIndex,
+                                            )
+                                          }
+                                          style={{
+                                            fontSize: "12px",
+                                            borderRadius: "4px",
+                                            backgroundColor: "#f8f9fa",
+                                            color: "#dc3545",
+                                            border: "1px solid #dc3545",
+                                            fontWeight: 600,
+                                            padding: "4px 10px",
+                                          }}
+                                        >
+                                          Remove
+                                        </Button>
+                                      </td>
+                                    </tr>
+                                  ),
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Box>
+            )}
+
+            {/* FAQs TAB */}
+            {activeTab === 2 && (
+              <Box sx={{ p: 2 }}>
+                <h6 className="mt-3 mb-3">Add Frequently Asked Questions</h6>
+                <div className="row mb-3">
+                  <div className="col-md-12">
+                    <div className="form-group">
+                      <label>Question</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Enter the question"
+                        value={currentFAQ.question}
+                        onChange={(e) =>
+                          setCurrentFAQ({
+                            ...currentFAQ,
+                            question: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="row mb-3">
+                  <div className="col-md-12">
+                    <div className="form-group">
+                      <label>Answer</label>
+                      <textarea
+                        rows={4}
+                        className="form-control"
+                        placeholder="Enter the answer"
+                        value={currentFAQ.answer}
+                        onChange={(e) =>
+                          setCurrentFAQ({
+                            ...currentFAQ,
+                            answer: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  onClick={addFAQ}
+                  className="btn-blue mb-4"
+                  variant="contained"
+                >
+                  Add FAQ
+                </Button>
+
+                {formFields.faq.length > 0 && (
+                  <div className="mt-4">
+                    <h6 className="mb-3">Added FAQs</h6>
+                    {formFields.faq.map((item, index) => (
+                      <div
+                        key={index}
+                        className="card p-3 mb-2"
+                        style={{ backgroundColor: "#f9f9f9" }}
+                      >
+                        <div className="d-flex justify-content-between align-items-start">
+                          <div style={{ flex: 1 }}>
+                            <h6 className="mb-2">Q: {item.question}</h6>
+                            <p className="mb-0" style={{ color: "#666" }}>
+                              A: {item.answer}
+                            </p>
+                          </div>
+                          <Button
+                            color="error"
+                            size="small"
+                            onClick={() => removeFAQ(index)}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Box>
+            )}
+          </div>
+
+          <div className="card p-4 mt-0">
             <div className="imagesUploadSec">
               <h5 className="mb-4">Media And Published</h5>
 
-              <div className="imgUploadBox d-flex align-items-center">
+              <div className="imgUploadBox d-flex align-items-center flex-wrap">
+                {/* Display Images */}
                 {previews?.length !== 0 &&
                   previews?.map((img, index) => {
                     return (
-                      <div className="uploadBox" key={index}>
+                      <div
+                        className="uploadBox"
+                        key={index}
+                        style={{ position: "relative" }}
+                      >
                         <span
                           className="remove"
                           onClick={() => removeImg(index, img)}
@@ -775,11 +1697,93 @@ const ProductUpload = () => {
                         </span>
                         <div className="box">
                           <LazyLoadImage
-                            alt={"image"}
+                            alt="product image"
                             effect="blur"
                             className="w-100"
                             src={img}
                           />
+                        </div>
+                        {/* Thumbnail Selection Button */}
+                        {selectedThumbnail !== img && (
+                          <Button
+                            size="small"
+                            onClick={() => setThumbnail(img)}
+                            style={{
+                              position: "absolute",
+                              bottom: "5px",
+                              left: "5px",
+                              fontSize: "10px",
+                              padding: "3px 8px",
+                              backgroundColor: "rgba(255,255,255,0.9)",
+                              color: "#0d6efd",
+                              border: "1px solid #0d6efd",
+                              fontWeight: "600",
+                            }}
+                          >
+                            Set as Thumbnail
+                          </Button>
+                        )}
+                        {selectedThumbnail === img && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: "5px",
+                              right: "5px",
+                              backgroundColor: "#28a745",
+                              color: "white",
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              fontSize: "11px",
+                              fontWeight: "600",
+                            }}
+                          >
+                            ✓ Thumbnail
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                {/* Display Videos */}
+                {videoPreviews?.length !== 0 &&
+                  videoPreviews?.map((video, index) => {
+                    return (
+                      <div
+                        className="uploadBox"
+                        key={`video-${index}`}
+                        style={{ position: "relative" }}
+                      >
+                        <span
+                          className="remove"
+                          onClick={() => removeVideo(index, video)}
+                        >
+                          <IoCloseSharp />
+                        </span>
+                        <div className="box">
+                          <video
+                            width="100%"
+                            height="auto"
+                            style={{ objectFit: "cover" }}
+                          >
+                            <source src={video} type="video/mp4" />
+                            Your browser does not support the video tag.
+                          </video>
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: "50%",
+                              left: "50%",
+                              transform: "translate(-50%, -50%)",
+                              color: "white",
+                              fontSize: "12px",
+                              fontWeight: "bold",
+                              backgroundColor: "rgba(0,0,0,0.5)",
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                            }}
+                          >
+                            VIDEO
+                          </div>
                         </div>
                       </div>
                     );
@@ -792,20 +1796,65 @@ const ProductUpload = () => {
                       <span>Uploading...</span>
                     </div>
                   ) : (
-                    <>
-                      <input
-                        type="file"
-                        multiple
-                        onChange={(e) =>
-                          onChangeFile(e, "/api/products/upload")
-                        }
-                        name="images"
-                      />
-                      <div className="info">
-                        <FaRegImages />
-                        <h5>image upload</h5>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "10px",
+                      }}
+                    >
+                      {/* Image Upload */}
+                      <div>
+                        <input
+                          type="file"
+                          multiple
+                          onChange={(e) =>
+                            onChangeFile(e, "/api/products/upload")
+                          }
+                          name="images"
+                          accept="image/*"
+                        />
+                        <div className="info">
+                          <FaRegImages />
+                          <h5>image upload</h5>
+                          <h5>Max Size: 50MB</h5>
+                        </div>
                       </div>
-                    </>
+                    </div>
+                  )}
+                </div>
+
+                {/* Video Upload Box */}
+                <div className="uploadBox">
+                  {uploading === true ? (
+                    <div className="progressBar text-center d-flex align-items-center justify-content-center flex-column">
+                      <CircularProgress />
+                      <span>Uploading...</span>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "10px",
+                      }}
+                    >
+                      {/* Video Upload */}
+                      <div>
+                        <input
+                          type="file"
+                          multiple
+                          onChange={onChangeFileVideo}
+                          name="videos"
+                          accept="video/*"
+                        />
+                        <div className="info">
+                          <FaCloudUploadAlt />
+                          <h5>video upload</h5>
+                          <h5>Max Size: 200MB</h5>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>

@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from 'react';
-import Logo from '../../assets/images/logo.webp';
+// import Logo from '../../assets/images/logo.webp';
 import patern from '../../assets/images/pattern.webp';
 import { MyContext } from '../../App';
 import { MdEmail } from "react-icons/md";
@@ -248,8 +248,8 @@ const Login = () => {
             <section className="loginSection">
                 <div className="loginBox">
                     <div className='logo text-center'>
-                        <img src={Logo} width="60px" />
-                        <h5 className='font-weight-bold'>Login to Hotash</h5>
+                        <img src={"https://webmedigital.com/logo.svg"} width="60px" />
+                        <h5 className='font-weight-bold'>Login to Webme</h5>
                     </div>
 
                     <div className='wrapper mt-3 card border'>
